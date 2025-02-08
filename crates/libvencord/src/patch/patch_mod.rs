@@ -1,13 +1,11 @@
 #[cfg(feature = "generate_asar")]
-use std::collections::HashMap;
-#[cfg(feature = "generate_asar")]
-use std::fs::File;
-#[cfg(feature = "generate_asar")]
-use std::io::Write;
+use {
+    std::collections::HashMap,
+    serde::Serialize,
+    tokio::{fs::File, io::AsyncWriteExt}
+};
 #[cfg(target_os = "linux")]
 use std::{env, process::Command};
-#[cfg(feature = "generate_asar")]
-use serde::Serialize;
 
 use crate::handler::handler::{error_with_code, ErrorCode, InstallerResult};
 #[cfg(target_os = "linux")]
@@ -16,6 +14,7 @@ use crate::paths::locations::get_data_path;
 use crate::paths::locations::is_scuffed_install;
 use crate::paths::shared::resource_dir_path;
 use crate::paths::branch::DiscordLocation;
+use tokio::fs::{rename, remove_file};
 
 #[cfg(target_os = "linux")]
 extern "C" {
@@ -32,7 +31,6 @@ struct AsarEntry {
 #[derive(Default)]
 pub struct Installer;
 impl Installer {
-    
     pub fn new() -> Self { 
         Installer
     }
@@ -52,15 +50,15 @@ impl Installer {
         let asar_path = resource_dir.join("app.asar");
         let _asar_path = resource_dir.join("_app.asar");
 
-        tokio::fs::rename(&asar_path, &_asar_path).await?;
-        tokio::fs::rename(patched_asar_file, &asar_path).await?;
+        rename(&asar_path, &_asar_path).await?;
+        rename(patched_asar_file, &asar_path).await?;
 
         #[cfg(target_os = "linux")]
         if discord_to_patch.is_system_electron {
             let asar_path = resource_dir.join("app.asar.unpacked");
             let _asar_path = resource_dir.join("_app.asar.unpacked");
 
-            tokio::fs::rename(&asar_path, &_asar_path).await?;
+            rename(&asar_path, &_asar_path).await?;
         }
 
         Ok(())
@@ -76,15 +74,15 @@ impl Installer {
         let asar_path = resource_dir.join("app.asar");
         let _asar_path = resource_dir.join("_app.asar");
 
-        tokio::fs::remove_file(&asar_path).await?;
-        tokio::fs::rename(&_asar_path, &asar_path).await?;
+        remove_file(&asar_path).await?;
+        rename(&_asar_path, &asar_path).await?;
 
         #[cfg(target_os = "linux")]
         if discord_to_patch.is_system_electron {
             let asar_path = resource_dir.join("app.asar.unpacked");
             let _asar_path = resource_dir.join("_app.asar.unpacked");
 
-            tokio::fs::rename(&_asar_path, &asar_path).await?;
+            rename(&_asar_path, &asar_path).await?;
         }
 
         Ok(())
@@ -110,15 +108,15 @@ impl Installer {
         let header = serde_json::to_string(&HashMap::from([("files".to_string(), files)]))?;
         let aligned_size = (header.len() as u32 + 3) & !3;
         
-        let mut file = File::create(out_file)?;
-        
-        [4u32, aligned_size + 8, aligned_size + 4, header.len() as u32]
-            .iter()
-            .try_for_each(|&size| file.write_all(&(size as i32).to_le_bytes()))?;
+        let mut file = File::create(out_file).await?;
+    
+        for size in [4u32, aligned_size + 8, aligned_size + 4, header.len() as u32] {
+            file.write_all(&(size as i32).to_le_bytes()).await?;
+        }
 
-        file.write_all(format!("{:<width$}", header, width = aligned_size as usize).as_bytes())?;
-        file.write_all(index_js.as_bytes())?;
-        file.write_all(pkg_json.as_bytes())?;
+        file.write_all(format!("{:<width$}", header, width = aligned_size as usize).as_bytes()).await?;
+        file.write_all(index_js.as_bytes()).await?;
+        file.write_all(pkg_json.as_bytes()).await?;
 
         Ok(())
     }

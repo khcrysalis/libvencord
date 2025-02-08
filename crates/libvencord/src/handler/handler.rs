@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum ErrorCode {
     /// Cannot modify a program while its in use or another program is using it
     ErrWindowsFileLock,

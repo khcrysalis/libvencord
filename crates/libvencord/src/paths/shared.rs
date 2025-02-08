@@ -14,27 +14,31 @@ use super::locations::get_discord_resource_location;
 /// # Returns
 /// 
 /// Returns a DiscordLocation if the path is a "valid" Discord installation, otherwise None.
-pub fn get_custom_discord_location(full_path: String) -> Option<DiscordLocation> {
-    let path = Path::new(&full_path);
+pub fn get_custom_discord_location(full_path: &str) -> Option<DiscordLocation> {
+    let path = Path::new(full_path);
+    if !(full_path.contains("Discord") || full_path.contains("discord")) {
+        return None;
+    }
+    
     let last_path_component = get_last_path_component(path).unwrap_or_default();
 
     let is_flatpak = is_location_flatpak(path);
-    let system_electron = is_location_system_electron(path);
+    let is_system_electron = is_location_system_electron(path);
 
-    if !system_electron && !path.join(get_discord_resource_location()).exists() {
+    if !(is_system_electron || path.join(get_discord_resource_location()).exists()) {
         return None;
     }
 
-    let patched = is_location_patched(path, &system_electron);
+    let patched = is_location_patched(path, &is_system_electron);
 
     Some(DiscordLocation {
         name: last_path_component.to_string(),
-        path: full_path.clone(),
+        path: full_path.to_string(),
         branch: DiscordBranch::from_path(last_path_component),
         patched,
         openasar: is_location_openasar(path, patched),
         is_flatpak,
-        is_system_electron: system_electron,
+        is_system_electron,
     })
 }
 
